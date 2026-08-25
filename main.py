@@ -131,3 +131,31 @@ def assign_units(units, tasks):
         remaining_units.remove(ui)
         remaining_tasks.remove(ti)
     return assignment
+
+
+def step_toward(unit_pos, target):
+    ux, uy = unit_pos
+    tx, ty = target
+    dx, dy = tx - ux, ty - uy
+    if dx == 0 and dy == 0:
+        return None
+    if abs(dx) >= abs(dy):
+        wanted = (1 if dx > 0 else -1, 0)
+    else:
+        wanted = (0, 1 if dy > 0 else -1)
+    for direction, delta in DIRECTION_DELTAS.items():
+        if delta == wanted:
+            return direction
+    return None
+
+
+def dispatch_unit(unit_pos, task, crop_for_plant):
+    if task is None:
+        return ["PASS"]
+    target = (task["x"], task["y"])
+    if unit_pos != target:
+        direction = step_toward(unit_pos, target)
+        return [direction] if direction else ["PASS"]
+    if task["type"] == "PLANT":
+        return ["PLANT", crop_for_plant] if crop_for_plant else ["PASS"]
+    return [task["type"]]

@@ -111,3 +111,26 @@ def test_assign_units_no_tasks_all_idle():
     units = [(0, 0), (1, 1)]
     result = main.assign_units(units, [])
     assert result == [None, None]
+
+
+def test_dispatch_unit_moves_toward_task():
+    task = {"type": "WATER", "x": 5, "y": 5, "priority": 0}
+    op = main.dispatch_unit((0, 5), task, crop_for_plant=None)
+    assert op == [main.step_toward((0, 5), (5, 5))]
+
+
+def test_dispatch_unit_acts_when_on_task_tile():
+    task = {"type": "WATER", "x": 5, "y": 5, "priority": 0}
+    op = main.dispatch_unit((5, 5), task, crop_for_plant=None)
+    assert op == ["WATER"]
+
+
+def test_dispatch_unit_plant_includes_crop():
+    task = {"type": "PLANT", "x": 2, "y": 2, "priority": 4}
+    op = main.dispatch_unit((2, 2), task, crop_for_plant="WHEAT")
+    assert op == ["PLANT", "WHEAT"]
+
+
+def test_dispatch_unit_no_task_passes():
+    op = main.dispatch_unit((0, 0), None, crop_for_plant=None)
+    assert op == ["PASS"]
