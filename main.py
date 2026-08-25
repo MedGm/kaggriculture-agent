@@ -159,3 +159,48 @@ def dispatch_unit(unit_pos, task, crop_for_plant):
     if task["type"] == "PLANT":
         return ["PLANT", crop_for_plant] if crop_for_plant else ["PASS"]
     return [task["type"]]
+
+
+SEED_RESTOCK_TARGET = 3
+SELL_CAP_PER_TURN = 10
+SELL_FLOOR_PRICE = 5
+SHED_FORCE_SELL_THRESHOLD = 90
+
+
+def seed_restock_orders(seeds_owned, rotation, cash):
+    orders = []
+    remaining_cash = cash
+    for crop in rotation:
+        owned = seeds_owned.get(crop, 0)
+        if owned >= SEED_RESTOCK_TARGET:
+            continue
+        cost = CROPS[crop]["seed_cost"] * SEED_RESTOCK_TARGET
+        if remaining_cash >= cost:
+            orders.append(["BUY_SEED", crop, SEED_RESTOCK_TARGET])
+            remaining_cash -= cost
+    if not orders and seeds_owned.get("WHEAT", 0) < 1 and remaining_cash >= CROPS["WHEAT"]["seed_cost"]:
+        orders.append(["BUY_SEED", "WHEAT", 1])
+    return orders
+
+
+def fertilizer_restock_order(has_fertilizer, pending_fertilize_tasks, fertilizer_price, cash):
+    if has_fertilizer or pending_fertilize_tasks <= 0:
+        return []
+    if cash < fertilizer_price:
+        return []
+    return [["BUY_PRODUCT", "FERTILIZER", 1]]
+
+
+def throttled_sell_orders(shed, prices):
+    total_in_shed = sum(shed.values())
+    force = total_in_shed >= SHED_FORCE_SELL_THRESHOLD
+    orders = []
+    for item, qty in shed.items():
+        if qty <= 0:
+            continue
+        price = prices.get(item, 1)
+        if not force and price <= SELL_FLOOR_PRICE:
+            continue
+        amount = qty if force else min(qty, SELL_CAP_PER_TURN)
+        orders.append(["SELL", item, amount])
+    return orders
