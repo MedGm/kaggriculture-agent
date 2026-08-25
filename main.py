@@ -35,3 +35,39 @@ def agent(obs):
 
 def _agent_impl(obs):
     return {"farmer": ["PASS"], "hands": [], "market": []}
+
+
+PHASE2_CASH_THRESHOLD = 400
+PHASE3_CASH_THRESHOLD = 1500
+
+
+def bonus_window_start(crop):
+    return math.ceil(CROPS[crop]["max_yield_day"] / 2)
+
+
+def rotation_plan(day, cash, tile_count):
+    if cash < PHASE2_CASH_THRESHOLD:
+        return {"WHEAT": 0.5, "CARROT": 0.5}
+    if cash < PHASE3_CASH_THRESHOLD:
+        return {"WHEAT": 0.3, "CARROT": 0.2, "MELON": 0.5}
+    return {
+        "WHEAT": 0.2,
+        "CARROT": 0.1,
+        "MELON": 0.4,
+        "TOMATO": 0.15,
+        "STRAWBERRY": 0.15,
+    }
+
+
+def choose_plant_crop(rotation, planted_counts, seeds_owned):
+    total = sum(planted_counts.values())
+    best_crop = None
+    best_deficit = None
+    for crop, target_fraction in rotation.items():
+        if seeds_owned.get(crop, 0) <= 0:
+            continue
+        deficit = target_fraction * total - planted_counts.get(crop, 0)
+        if best_deficit is None or deficit > best_deficit:
+            best_deficit = deficit
+            best_crop = crop
+    return best_crop
