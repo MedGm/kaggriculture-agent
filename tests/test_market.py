@@ -92,6 +92,13 @@ def test_hire_orders_skips_when_backlog_low():
     assert orders == []
 
 
+def test_hire_orders_stops_at_daily_cap_even_with_huge_backlog_and_cash():
+    # Without this cap, fib_cost's exponential growth makes late-day hires
+    # (fib(15)=987+) cost more than a hand could ever produce in one day.
+    orders = main.hire_orders(hires_today=6, pending_task_count=1000, unit_count=1, cash=100000)
+    assert orders == []
+
+
 def test_hire_orders_skips_when_cash_too_low():
     orders = main.hire_orders(hires_today=5, pending_task_count=100, unit_count=1, cash=10)
     assert orders == []  # fib_cost(5)=8 + 200 reserve > 10

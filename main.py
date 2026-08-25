@@ -200,6 +200,7 @@ LAND_UTILIZATION_THRESHOLD = 0.6
 LAND_CASH_RESERVE = 150
 HIRE_TASKS_PER_UNIT = 3
 HIRE_CASH_RESERVE = 100
+MAX_HIRES_PER_DAY = 6  # fib_cost(6)=13; beyond this, per-hand cost outgrows a day's output
 
 
 def fib_cost(n):
@@ -210,6 +211,8 @@ def fib_cost(n):
 
 
 def hire_orders(hires_today, pending_task_count, unit_count, cash):
+    if hires_today >= MAX_HIRES_PER_DAY:
+        return []
     if pending_task_count <= HIRE_TASKS_PER_UNIT * unit_count:
         return []
     cost = fib_cost(hires_today)
