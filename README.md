@@ -44,10 +44,10 @@ obs → task queue → unit assignment → dispatch → action dict
 3. **Dispatch** (`dispatch_unit`, `step_toward`) — moves a unit one step toward its task's tile, or performs the task if already there.
 4. **Rotation planning** (`rotation_plan`, `choose_plant_crop`) — a cash-gated three-phase crop mix: wheat/carrot early, melon once cash allows, tomato/strawberry once there's surplus. New `PLANT` tasks target whichever crop is furthest below its phase's target share.
 5. **Market orders** — built independently each turn, capped at the game's 10-order limit, in priority order:
+   - `throttled_sell_orders` — caps units sold per resource per turn so a big harvest doesn't crash its own price; force-sells only when the shed is near its 100-item cap. Sells go first: unsold inventory is worthless at game end, so cashing out must never be crowded out of the order cap by restocking.
    - `seed_restock_orders` / `fertilizer_restock_order` — keep seed and fertilizer stock ahead of demand
-   - `throttled_sell_orders` — caps units sold per resource per turn so a big harvest doesn't crash its own price; force-sells only when the shed is near its 100-item cap
-   - `hire_orders` — hires a farm hand only when the task backlog justifies the `fib(n)`-scaling cost
-   - `land_orders` — buys the next quadrant only once existing land is ~80% utilized
+   - `hire_orders` — hires a farm hand only when the task backlog justifies the `fib(n)`-scaling cost, capped at 6 hires/day (fib_cost grows fast enough that later hires cost more than a hand can produce in a day)
+   - `land_orders` — buys the next quadrant only once existing land is ~60% utilized
 
 `agent()` itself is a thin wrapper: any exception anywhere in the pipeline falls back to `PASS` + no market orders, so a bug never costs a turn beyond the one it occurs on.
 

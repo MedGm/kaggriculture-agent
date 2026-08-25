@@ -280,12 +280,16 @@ def _agent_impl(obs):
 
     pending_fertilize_tasks = sum(1 for t in tasks if t["type"] == "FERTILIZE")
 
+    # Sells come first: unsold shed items are worthless at game end, so
+    # converting produce to cash must never be crowded out of the 10-order
+    # cap by restocking (a real match showed 5+ active crops' seed restocks
+    # eating the whole order budget while sellable inventory piled up unsold).
     market_orders = []
+    market_orders += throttled_sell_orders(shed, prices)
     market_orders += seed_restock_orders(seeds_owned, rotation, cash)
     market_orders += fertilizer_restock_order(
         has_fertilizer, pending_fertilize_tasks, prices.get("FERTILIZER", 100), cash,
     )
-    market_orders += throttled_sell_orders(shed, prices)
     market_orders += hire_orders(me["hires_today"], len(tasks), len(units), cash)
     market_orders += land_orders(me["unlocked_quadrants"], tiles, cash)
     market_orders = market_orders[:10]
