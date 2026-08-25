@@ -75,3 +75,41 @@ def test_throttled_sell_forces_full_sell_when_shed_nearly_full():
     orders = main.throttled_sell_orders(shed=shed, prices={"MELON": 3, "WHEAT": 25})
     assert ["SELL", "MELON", 4] in orders
     assert ["SELL", "WHEAT", 87] in orders
+
+
+def test_fib_cost_matches_documented_sequence():
+    assert [main.fib_cost(n) for n in range(8)] == [1, 1, 2, 3, 5, 8, 13, 21]
+
+
+def test_hire_orders_hires_when_backlog_high_and_affordable():
+    # backlog threshold: pending_task_count > 5 * (unit_count + hires_today already accounted via unit_count)
+    orders = main.hire_orders(hires_today=0, pending_task_count=10, unit_count=1, cash=1000)
+    assert orders == [["HIRE"]]
+
+
+def test_hire_orders_skips_when_backlog_low():
+    orders = main.hire_orders(hires_today=0, pending_task_count=3, unit_count=1, cash=1000)
+    assert orders == []
+
+
+def test_hire_orders_skips_when_cash_too_low():
+    orders = main.hire_orders(hires_today=5, pending_task_count=100, unit_count=1, cash=10)
+    assert orders == []  # fib_cost(5)=8 + 200 reserve > 10
+
+
+def test_land_orders_buys_when_utilized_and_affordable():
+    tiles = [[{"kind": "WEED"}] * 5 for _ in range(5)]  # all 25 tiles occupied
+    orders = main.land_orders(unlocked_quadrants=["NW"], tiles=tiles, cash=2000)
+    assert orders == [["BUY_LAND"]]
+
+
+def test_land_orders_skips_when_underutilized():
+    tiles = [[None] * 5 for _ in range(5)]  # nothing planted, 0% utilization
+    orders = main.land_orders(unlocked_quadrants=["NW"], tiles=tiles, cash=2000)
+    assert orders == []
+
+
+def test_land_orders_skips_when_unaffordable():
+    tiles = [[{"kind": "WEED"}] * 5 for _ in range(5)]
+    orders = main.land_orders(unlocked_quadrants=["NW"], tiles=tiles, cash=500)
+    assert orders == []  # next cost is 1000

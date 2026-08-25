@@ -204,3 +204,43 @@ def throttled_sell_orders(shed, prices):
         amount = qty if force else min(qty, SELL_CAP_PER_TURN)
         orders.append(["SELL", item, amount])
     return orders
+
+
+LAND_COSTS = [1000, 2000, 4000]
+LAND_UTILIZATION_THRESHOLD = 0.8
+LAND_CASH_RESERVE = 200
+HIRE_TASKS_PER_UNIT = 5
+HIRE_CASH_RESERVE = 200
+
+
+def fib_cost(n):
+    a, b = 1, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+
+
+def hire_orders(hires_today, pending_task_count, unit_count, cash):
+    if pending_task_count <= HIRE_TASKS_PER_UNIT * unit_count:
+        return []
+    cost = fib_cost(hires_today)
+    if cash < cost + HIRE_CASH_RESERVE:
+        return []
+    return [["HIRE"]]
+
+
+def land_orders(unlocked_quadrants, tiles, cash):
+    num_owned = len(unlocked_quadrants)
+    if num_owned >= len(LAND_COSTS) + 1:
+        return []
+    total = sum(1 for row in tiles for tile in row if tile != "LOCKED")
+    if total == 0:
+        return []
+    occupied = sum(1 for row in tiles for tile in row if tile not in (None, "LOCKED"))
+    utilization = occupied / total
+    if utilization < LAND_UTILIZATION_THRESHOLD:
+        return []
+    cost = LAND_COSTS[num_owned - 1]
+    if cash < cost + LAND_CASH_RESERVE:
+        return []
+    return [["BUY_LAND"]]
