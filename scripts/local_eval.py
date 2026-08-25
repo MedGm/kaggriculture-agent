@@ -9,7 +9,7 @@ def run_match(opponent_name, episode_steps=720):
     project_root = os.path.dirname(script_dir)
     os.chdir(project_root)
 
-    env = make("kaggriculture", configuration={"episodeSteps": episode_steps}, debug=False)
+    env = make("kaggriculture", configuration={"episodeSteps": episode_steps}, debug=True)
     env.run(["main.py", opponent_name])
     final = env.steps[-1]
     my_money = final[0].observation["farms"][0]["money"]
