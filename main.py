@@ -110,3 +110,24 @@ def build_task_queue(tiles, day, has_fertilizer):
                     "priority": TASK_PRIORITY[task_type],
                 })
     return tasks
+
+
+def assign_units(units, tasks):
+    assignment = [None] * len(units)
+    remaining_units = list(range(len(units)))
+    remaining_tasks = list(range(len(tasks)))
+    while remaining_units and remaining_tasks:
+        best = None
+        for ui in remaining_units:
+            ux, uy = units[ui]
+            for ti in remaining_tasks:
+                task = tasks[ti]
+                dist = abs(ux - task["x"]) + abs(uy - task["y"])
+                key = (task["priority"], dist, ui, ti)
+                if best is None or key < best[0]:
+                    best = (key, ui, ti)
+        _, ui, ti = best
+        assignment[ui] = tasks[ti]
+        remaining_units.remove(ui)
+        remaining_tasks.remove(ti)
+    return assignment

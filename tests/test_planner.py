@@ -74,3 +74,40 @@ def test_build_task_queue_scans_full_grid_row_major():
     tasks = main.build_task_queue(tiles, day=1, has_fertilizer=False)
     coords = {(t["x"], t["y"]) for t in tasks}
     assert coords == {(0, 0), (1, 0), (0, 1), (1, 1)}
+
+
+def test_assign_units_nearest_task_wins():
+    units = [(0, 0), (5, 5)]
+    tasks = [
+        {"type": "WATER", "x": 1, "y": 0, "priority": 0},
+        {"type": "WATER", "x": 4, "y": 5, "priority": 0},
+    ]
+    result = main.assign_units(units, tasks)
+    assert result[0] == tasks[0]
+    assert result[1] == tasks[1]
+
+
+def test_assign_units_priority_beats_distance():
+    # Unit 0 is closer to the low-priority PLANT task, but the WATER task
+    # (priority 0) must be claimed first even though it's farther.
+    units = [(0, 0)]
+    tasks = [
+        {"type": "PLANT", "x": 1, "y": 0, "priority": 4},
+        {"type": "WATER", "x": 9, "y": 9, "priority": 0},
+    ]
+    result = main.assign_units(units, tasks)
+    assert result[0]["type"] == "WATER"
+
+
+def test_assign_units_leftover_units_are_idle():
+    units = [(0, 0), (1, 1)]
+    tasks = [{"type": "WATER", "x": 0, "y": 0, "priority": 0}]
+    result = main.assign_units(units, tasks)
+    assert result[0] == tasks[0]
+    assert result[1] is None
+
+
+def test_assign_units_no_tasks_all_idle():
+    units = [(0, 0), (1, 1)]
+    result = main.assign_units(units, [])
+    assert result == [None, None]
