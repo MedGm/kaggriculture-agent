@@ -235,16 +235,10 @@ def land_orders(unlocked_quadrants, tiles, cash):
     return [["BUY_LAND"]]
 
 
-# Must be the LAST callable defined in this file: kaggle_environments loads a
-# file-based agent submission via the last callable in the module namespace
-# (kaggle_environments/agent.py get_last_callable), not by name.
-def agent(obs):
-    try:
-        return _agent_impl(obs)
-    except Exception:
-        return {"farmer": ["PASS"], "hands": [], "market": []}
-
-
+# agent() must be the LAST callable defined in this file: kaggle_environments
+# loads a file-based agent submission via the last callable in the module
+# namespace (kaggle_environments/agent.py get_last_callable), not by name.
+# _agent_impl must therefore be defined BEFORE agent, so agent stays last.
 def _agent_impl(obs):
     player = obs["player"]
     day = obs["day"]
@@ -294,3 +288,10 @@ def _agent_impl(obs):
     market_orders = market_orders[:10]
 
     return {"farmer": farmer_op, "hands": hand_ops, "market": market_orders}
+
+
+def agent(obs):
+    try:
+        return _agent_impl(obs)
+    except Exception:
+        return {"farmer": ["PASS"], "hands": [], "market": []}
