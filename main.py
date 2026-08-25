@@ -71,3 +71,42 @@ def choose_plant_crop(rotation, planted_counts, seeds_owned):
             best_deficit = deficit
             best_crop = crop
     return best_crop
+
+
+def _fertilize_eligible(tile, day, has_fertilizer):
+    if not has_fertilizer:
+        return False
+    crop = tile["crop"]
+    if CROPS[crop]["ongoing"]:
+        return False  # V1 scope: fertilize one-time crops only
+    if tile["fertilized_until_day"] >= day:
+        return False
+    age = day - tile["planted_day"]
+    return bonus_window_start(crop) <= age <= CROPS[crop]["max_yield_day"]
+
+
+def build_task_queue(tiles, day, has_fertilizer):
+    tasks = []
+    for y, row in enumerate(tiles):
+        for x, tile in enumerate(row):
+            task_type = None
+            if tile is None:
+                task_type = "PLANT"
+            elif tile == "LOCKED":
+                continue
+            elif tile.get("kind") == "WEED":
+                task_type = "DIG"
+            elif tile.get("kind") == "PLANT":
+                if not tile["watered_today"]:
+                    task_type = "WATER"
+                elif tile["yield_units"] > 0:
+                    task_type = "HARVEST"
+                elif _fertilize_eligible(tile, day, has_fertilizer):
+                    task_type = "FERTILIZE"
+            # COOP / PASTURE: no-op in V1 (no animals)
+            if task_type is not None:
+                tasks.append({
+                    "type": task_type, "x": x, "y": y,
+                    "priority": TASK_PRIORITY[task_type],
+                })
+    return tasks
