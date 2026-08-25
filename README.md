@@ -28,7 +28,7 @@ Two players each manage a farm for a 30-day season (720 turns), competing on a s
 | | |
 |---|---|
 | Current submission | `main.py` — V1 crops-only heuristic agent |
-| Local result | beats `random` (~$13.5k vs $0) and `starter` (~$13.5k vs ~$3.5k) over 720 turns |
+| Local result | beats `random` (~$13.5k vs $0) and `starter` ( ~$13.5k vs ~$3.5k) over 720 turns |
 | Leaderboard | early — current score sits well behind the top teams (~600 vs ~2900–3100). V1 is a correctness-first baseline, not yet tuned for competitive economy. Tuning and animal support are next. |
 
 ## How the agent works

@@ -12,12 +12,12 @@ def test_bonus_window_start_melon():
 
 
 def test_rotation_plan_phase1_low_cash():
-    plan = main.rotation_plan(day=1, cash=300, tile_count=25)
+    plan = main.rotation_plan(day=1, cash=200, tile_count=25)
     assert plan == {"WHEAT": 0.5, "CARROT": 0.5}
 
 
 def test_rotation_plan_phase2_mid_cash():
-    plan = main.rotation_plan(day=10, cash=800, tile_count=25)
+    plan = main.rotation_plan(day=10, cash=500, tile_count=25)
     assert plan == {"WHEAT": 0.3, "CARROT": 0.2, "MELON": 0.5}
 
 

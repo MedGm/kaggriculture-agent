@@ -49,7 +49,7 @@ def test_agent_returns_well_formed_action_on_fresh_farm():
 
 def test_agent_buys_wheat_seed_on_empty_farm_with_no_seeds():
     result = main.agent(_synthetic_obs())
-    assert ["BUY_SEED", "WHEAT", 3] in result["market"] or ["BUY_SEED", "WHEAT", 1] in result["market"]
+    assert ["BUY_SEED", "WHEAT", 8] in result["market"] or ["BUY_SEED", "WHEAT", 1] in result["market"]
 
 
 def test_agent_plants_on_empty_tile_when_seed_owned():

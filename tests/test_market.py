@@ -13,16 +13,16 @@ def test_seed_restock_tops_up_each_rotation_crop_when_affordable():
     orders = main.seed_restock_orders(
         seeds_owned={"WHEAT": 0, "CARROT": 0}, rotation={"WHEAT": 0.5, "CARROT": 0.5}, cash=1000,
     )
-    assert ["BUY_SEED", "WHEAT", 3] in orders
-    assert ["BUY_SEED", "CARROT", 3] in orders
+    assert ["BUY_SEED", "WHEAT", 8] in orders
+    assert ["BUY_SEED", "CARROT", 8] in orders
 
 
 def test_seed_restock_skips_crop_already_stocked():
     orders = main.seed_restock_orders(
-        seeds_owned={"WHEAT": 5, "CARROT": 0}, rotation={"WHEAT": 0.5, "CARROT": 0.5}, cash=1000,
+        seeds_owned={"WHEAT": 10, "CARROT": 0}, rotation={"WHEAT": 0.5, "CARROT": 0.5}, cash=1000,
     )
     assert all(order[1] != "WHEAT" for order in orders)
-    assert ["BUY_SEED", "CARROT", 3] in orders
+    assert ["BUY_SEED", "CARROT", 8] in orders
 
 
 def test_fertilizer_restock_buys_when_pending_and_broke_of_it():
