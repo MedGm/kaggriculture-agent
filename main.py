@@ -23,7 +23,27 @@ DIRECTION_DELTAS = {
     "WEST": (-1, 0),
 }
 
-TASK_PRIORITY = {"WATER": 0, "HARVEST": 1, "DIG": 2, "FERTILIZE": 3, "PLANT": 4}
+TASK_PRIORITY = {
+    "WATER": 0, "FEED": 0,
+    "HARVEST": 1,
+    "DIG": 2, "BUILD_COOP": 2, "BUILD_PASTURE": 2, "DELIVER": 2,
+    "FERTILIZE": 3, "CARE": 3,
+    "PLANT": 4,
+    "COLLECT_FERTILIZER": 5,
+}
+
+ANIMALS = {
+    "GOOSE": {"cost": 300, "structure": "COOP"},
+    "COW":   {"cost": 400, "structure": "PASTURE"},
+    "SHEEP": {"cost": 500, "structure": "PASTURE"},
+}
+ANIMAL_TARGET = {"GOOSE": 1, "COW": 1, "SHEEP": 1}
+COOP_TARGET = 1
+PASTURE_TARGET = 2
+
+# The shed sits at the board center, on none of the 4 tiles adjacent to it —
+# for boardSize=10, those are (half-1,half-1),(half,half-1),(half-1,half),(half,half).
+SHED_ADJACENT_TILES = [(4, 4), (5, 4), (4, 5), (5, 5)]
 
 
 PHASE2_CASH_THRESHOLD = 250
@@ -92,13 +112,104 @@ def build_task_queue(tiles, day, has_fertilizer):
                     task_type = "HARVEST"
                 elif _fertilize_eligible(tile, day, has_fertilizer):
                     task_type = "FERTILIZE"
-            # COOP / PASTURE: no-op in V1 (no animals)
+            elif tile.get("kind") in ("COOP", "PASTURE") and tile.get("animal") is not None:
+                if not tile["fed_today"]:
+                    task_type = "FEED"
+                elif tile["yield_units"] > 0:
+                    task_type = "HARVEST"
+                elif not tile["cared_today"]:
+                    task_type = "CARE"
+                elif tile.get("fertilizer_available"):
+                    task_type = "COLLECT_FERTILIZER"
+            # Empty COOP/PASTURE (animal is None): handled by animal_setup_tasks,
+            # not here, since placing an animal needs shed-wide context (do we
+            # own one yet?), not just this tile's state.
             if task_type is not None:
                 tasks.append({
                     "type": task_type, "x": x, "y": y,
                     "priority": TASK_PRIORITY[task_type],
                 })
     return tasks
+
+
+def _animal_structures(tiles):
+    coop_tiles = []
+    pasture_tiles = []
+    for y, row in enumerate(tiles):
+        for x, tile in enumerate(row):
+            if isinstance(tile, dict) and tile.get("kind") == "COOP":
+                coop_tiles.append((x, y, tile))
+            elif isinstance(tile, dict) and tile.get("kind") == "PASTURE":
+                pasture_tiles.append((x, y, tile))
+    return coop_tiles, pasture_tiles
+
+
+def _empty_tiles(tiles):
+    return [(x, y) for y, row in enumerate(tiles) for x, tile in enumerate(row) if tile is None]
+
+
+def animal_setup_tasks(tiles, shed, inventories=None):
+    # An animal counts as "available to deliver" whether it's still in the
+    # shed or already picked up into a unit's inventory — otherwise the
+    # DELIVER task vanishes the instant PICKUP empties the shed slot, and
+    # the carrying unit's cargo becomes invisible to task generation (it
+    # just picks up the next animal instead of finishing the delivery).
+    inventories = inventories or []
+
+    def available(animal):
+        return shed.get(animal, 0) + sum(inv.get(animal, 0) for inv in inventories)
+
+    coop_tiles, pasture_tiles = _animal_structures(tiles)
+    tasks = []
+    empties = iter(_empty_tiles(tiles))
+    if len(coop_tiles) < COOP_TARGET:
+        pos = next(empties, None)
+        if pos:
+            tasks.append({"type": "BUILD_COOP", "x": pos[0], "y": pos[1], "priority": TASK_PRIORITY["BUILD_COOP"]})
+    if len(pasture_tiles) < PASTURE_TARGET:
+        pos = next(empties, None)
+        if pos:
+            tasks.append({"type": "BUILD_PASTURE", "x": pos[0], "y": pos[1], "priority": TASK_PRIORITY["BUILD_PASTURE"]})
+
+    unoccupied_coops = [(x, y) for x, y, t in coop_tiles if t.get("animal") is None]
+    if unoccupied_coops and available("GOOSE") > 0:
+        x, y = unoccupied_coops[0]
+        tasks.append({"type": "DELIVER", "x": x, "y": y, "priority": TASK_PRIORITY["DELIVER"], "animal": "GOOSE"})
+
+    placed_pasture_animals = [t.get("animal") for _, _, t in pasture_tiles if t.get("animal") is not None]
+    for x, y in [(x, y) for x, y, t in pasture_tiles if t.get("animal") is None]:
+        if "COW" not in placed_pasture_animals and available("COW") > 0:
+            tasks.append({"type": "DELIVER", "x": x, "y": y, "priority": TASK_PRIORITY["DELIVER"], "animal": "COW"})
+            placed_pasture_animals.append("COW")
+        elif "SHEEP" not in placed_pasture_animals and available("SHEEP") > 0:
+            tasks.append({"type": "DELIVER", "x": x, "y": y, "priority": TASK_PRIORITY["DELIVER"], "animal": "SHEEP"})
+            placed_pasture_animals.append("SHEEP")
+    return tasks
+
+
+def animal_buy_orders(tiles, shed, cash):
+    coop_tiles, pasture_tiles = _animal_structures(tiles)
+    placed = {"GOOSE": 0, "COW": 0, "SHEEP": 0}
+    for _, _, t in coop_tiles + pasture_tiles:
+        animal = t.get("animal")
+        if animal in placed:
+            placed[animal] += 1
+
+    orders = []
+    remaining_cash = cash
+    for animal, target in ANIMAL_TARGET.items():
+        have = placed[animal] + shed.get(animal, 0)
+        if have >= target:
+            continue
+        cost = ANIMALS[animal]["cost"]
+        if remaining_cash >= cost:
+            orders.append(["BUY_ANIMAL", animal, 1])
+            remaining_cash -= cost
+    return orders
+
+
+def nearest_shed_tile(unit_pos):
+    return min(SHED_ADJACENT_TILES, key=lambda t: abs(t[0] - unit_pos[0]) + abs(t[1] - unit_pos[1]))
 
 
 def assign_units(units, tasks):
@@ -138,9 +249,17 @@ def step_toward(unit_pos, target):
     return None
 
 
-def dispatch_unit(unit_pos, task, crop_for_plant):
+def dispatch_unit(unit_pos, task, crop_for_plant, unit_inventory=None):
     if task is None:
         return ["PASS"]
+    if task["type"] == "DELIVER":
+        animal = task["animal"]
+        carrying = (unit_inventory or {}).get(animal, 0) > 0
+        target = (task["x"], task["y"]) if carrying else nearest_shed_tile(unit_pos)
+        if unit_pos != target:
+            direction = step_toward(unit_pos, target)
+            return [direction] if direction else ["PASS"]
+        return ["PLACE", animal] if carrying else ["PICKUP", animal, 1]
     target = (task["x"], task["y"])
     if unit_pos != target:
         direction = step_toward(unit_pos, target)
@@ -178,6 +297,25 @@ def fertilizer_restock_order(has_fertilizer, pending_fertilize_tasks, fertilizer
     if cash < fertilizer_price:
         return []
     return [["BUY_PRODUCT", "FERTILIZER", 1]]
+
+
+FEED_STOCK_TARGET = 5
+
+
+def feed_restock_order(shed_wheat, live_animal_count, wheat_price, cash):
+    # Feed supply must not depend on the farm's own wheat crop: with animals
+    # added, FEED (priority 0) competes with WATER/PLANT for the same single
+    # farmer, so relying on home-grown wheat starved feeding (and the wheat
+    # crop itself) for the first week in testing. Buying wheat directly
+    # decouples "animals get fed" from "the farmer got around to farming."
+    if live_animal_count <= 0 or shed_wheat >= FEED_STOCK_TARGET:
+        return []
+    needed = FEED_STOCK_TARGET - shed_wheat
+    affordable = int(cash // wheat_price) if wheat_price > 0 else 0
+    amount = min(needed, affordable)
+    if amount <= 0:
+        return []
+    return [["BUY_PRODUCT", "WHEAT", amount]]
 
 
 def throttled_sell_orders(shed, prices):
@@ -253,6 +391,7 @@ def _agent_impl(obs):
     hand_positions = [tuple(h) for h in me["hands"]]
     shed = private["shed"]
     seeds_owned = private["seeds"]
+    inventories = private["inventories"]
     prices = obs["market"]["prices"]
 
     tile_count = sum(1 for row in tiles for tile in row if tile != "LOCKED")
@@ -265,27 +404,39 @@ def _agent_impl(obs):
                 planted_counts[tile["crop"]] = planted_counts.get(tile["crop"], 0) + 1
 
     has_fertilizer = shed.get("FERTILIZER", 0) > 0
-    tasks = build_task_queue(tiles, day, has_fertilizer)
+    tasks = build_task_queue(tiles, day, has_fertilizer) + animal_setup_tasks(tiles, shed, inventories)
 
     units = [(fx, fy)] + list(hand_positions)
     assignment = assign_units(units, tasks)
 
     crop_for_plant = choose_plant_crop(rotation, planted_counts, seeds_owned)
 
-    farmer_op = dispatch_unit((fx, fy), assignment[0], crop_for_plant)
+    farmer_inventory = inventories[0] if inventories else {}
+    farmer_op = dispatch_unit((fx, fy), assignment[0], crop_for_plant, farmer_inventory)
     hand_ops = [
-        dispatch_unit(pos, assignment[i + 1], crop_for_plant)
+        dispatch_unit(
+            pos, assignment[i + 1], crop_for_plant,
+            inventories[i + 1] if i + 1 < len(inventories) else {},
+        )
         for i, pos in enumerate(hand_positions)
     ]
 
     pending_fertilize_tasks = sum(1 for t in tasks if t["type"] == "FERTILIZE")
+    live_animal_count = sum(
+        1 for row in tiles for tile in row
+        if isinstance(tile, dict) and tile.get("kind") in ("COOP", "PASTURE") and tile.get("animal") is not None
+    )
 
     # Sells come first: unsold shed items are worthless at game end, so
     # converting produce to cash must never be crowded out of the 10-order
     # cap by restocking (a real match showed 5+ active crops' seed restocks
     # eating the whole order budget while sellable inventory piled up unsold).
+    # Feed restock comes right after: a starved animal escapes permanently,
+    # so protecting existing animal investment outranks buying new ones.
     market_orders = []
     market_orders += throttled_sell_orders(shed, prices)
+    market_orders += feed_restock_order(shed.get("WHEAT", 0), live_animal_count, prices.get("WHEAT", 25), cash)
+    market_orders += animal_buy_orders(tiles, shed, cash)
     market_orders += seed_restock_orders(seeds_owned, rotation, cash)
     market_orders += fertilizer_restock_order(
         has_fertilizer, pending_fertilize_tasks, prices.get("FERTILIZER", 100), cash,

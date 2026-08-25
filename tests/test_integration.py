@@ -55,6 +55,11 @@ def test_agent_buys_wheat_seed_on_empty_farm_with_no_seeds():
 def test_agent_plants_on_empty_tile_when_seed_owned():
     obs = _synthetic_obs()
     obs["private"]["seeds"] = {"WHEAT": 5}
+    # Satisfy animal-infra targets elsewhere on the grid so BUILD_COOP/PASTURE
+    # (priority 2) don't outrank the PLANT task this test is checking.
+    obs["farms"][0]["tiles"][0][0] = {"kind": "COOP", "animal": "GOOSE", "fed_today": True, "yield_units": 0, "cared_today": True, "fertilizer_available": False}
+    obs["farms"][0]["tiles"][0][1] = {"kind": "PASTURE", "animal": "COW", "fed_today": True, "yield_units": 0, "cared_today": True, "fertilizer_available": False}
+    obs["farms"][0]["tiles"][0][2] = {"kind": "PASTURE", "animal": "SHEEP", "fed_today": True, "yield_units": 0, "cared_today": True, "fertilizer_available": False}
     result = main.agent(obs)
     # Farmer stands on (4,4), an empty tile -> should plant directly (no move needed).
     assert result["farmer"] == ["PLANT", "WHEAT"]
