@@ -26,64 +26,6 @@ DIRECTION_DELTAS = {
 TASK_PRIORITY = {"WATER": 0, "HARVEST": 1, "DIG": 2, "FERTILIZE": 3, "PLANT": 4}
 
 
-def agent(obs):
-    try:
-        return _agent_impl(obs)
-    except Exception:
-        return {"farmer": ["PASS"], "hands": [], "market": []}
-
-
-def _agent_impl(obs):
-    player = obs["player"]
-    day = obs["day"]
-    me = obs["farms"][player]
-    private = obs["private"]
-    tiles = me["tiles"]
-    cash = me["money"]
-    fx, fy = me["farmer"]
-    hand_positions = [tuple(h) for h in me["hands"]]
-    shed = private["shed"]
-    seeds_owned = private["seeds"]
-    prices = obs["market"]["prices"]
-
-    tile_count = sum(1 for row in tiles for tile in row if tile != "LOCKED")
-    rotation = rotation_plan(day, cash, tile_count)
-
-    planted_counts = {}
-    for row in tiles:
-        for tile in row:
-            if isinstance(tile, dict) and tile.get("kind") == "PLANT":
-                planted_counts[tile["crop"]] = planted_counts.get(tile["crop"], 0) + 1
-
-    has_fertilizer = shed.get("FERTILIZER", 0) > 0
-    tasks = build_task_queue(tiles, day, has_fertilizer)
-
-    units = [(fx, fy)] + list(hand_positions)
-    assignment = assign_units(units, tasks)
-
-    crop_for_plant = choose_plant_crop(rotation, planted_counts, seeds_owned)
-
-    farmer_op = dispatch_unit((fx, fy), assignment[0], crop_for_plant)
-    hand_ops = [
-        dispatch_unit(pos, assignment[i + 1], crop_for_plant)
-        for i, pos in enumerate(hand_positions)
-    ]
-
-    pending_fertilize_tasks = sum(1 for t in tasks if t["type"] == "FERTILIZE")
-
-    market_orders = []
-    market_orders += seed_restock_orders(seeds_owned, rotation, cash)
-    market_orders += fertilizer_restock_order(
-        has_fertilizer, pending_fertilize_tasks, prices.get("FERTILIZER", 100), cash,
-    )
-    market_orders += throttled_sell_orders(shed, prices)
-    market_orders += hire_orders(me["hires_today"], len(tasks), len(units), cash)
-    market_orders += land_orders(me["unlocked_quadrants"], tiles, cash)
-    market_orders = market_orders[:10]
-
-    return {"farmer": farmer_op, "hands": hand_ops, "market": market_orders}
-
-
 PHASE2_CASH_THRESHOLD = 400
 PHASE3_CASH_THRESHOLD = 1500
 
@@ -291,3 +233,64 @@ def land_orders(unlocked_quadrants, tiles, cash):
     if cash < cost + LAND_CASH_RESERVE:
         return []
     return [["BUY_LAND"]]
+
+
+# Must be the LAST callable defined in this file: kaggle_environments loads a
+# file-based agent submission via the last callable in the module namespace
+# (kaggle_environments/agent.py get_last_callable), not by name.
+def agent(obs):
+    try:
+        return _agent_impl(obs)
+    except Exception:
+        return {"farmer": ["PASS"], "hands": [], "market": []}
+
+
+def _agent_impl(obs):
+    player = obs["player"]
+    day = obs["day"]
+    me = obs["farms"][player]
+    private = obs["private"]
+    tiles = me["tiles"]
+    cash = me["money"]
+    fx, fy = me["farmer"]
+    hand_positions = [tuple(h) for h in me["hands"]]
+    shed = private["shed"]
+    seeds_owned = private["seeds"]
+    prices = obs["market"]["prices"]
+
+    tile_count = sum(1 for row in tiles for tile in row if tile != "LOCKED")
+    rotation = rotation_plan(day, cash, tile_count)
+
+    planted_counts = {}
+    for row in tiles:
+        for tile in row:
+            if isinstance(tile, dict) and tile.get("kind") == "PLANT":
+                planted_counts[tile["crop"]] = planted_counts.get(tile["crop"], 0) + 1
+
+    has_fertilizer = shed.get("FERTILIZER", 0) > 0
+    tasks = build_task_queue(tiles, day, has_fertilizer)
+
+    units = [(fx, fy)] + list(hand_positions)
+    assignment = assign_units(units, tasks)
+
+    crop_for_plant = choose_plant_crop(rotation, planted_counts, seeds_owned)
+
+    farmer_op = dispatch_unit((fx, fy), assignment[0], crop_for_plant)
+    hand_ops = [
+        dispatch_unit(pos, assignment[i + 1], crop_for_plant)
+        for i, pos in enumerate(hand_positions)
+    ]
+
+    pending_fertilize_tasks = sum(1 for t in tasks if t["type"] == "FERTILIZE")
+
+    market_orders = []
+    market_orders += seed_restock_orders(seeds_owned, rotation, cash)
+    market_orders += fertilizer_restock_order(
+        has_fertilizer, pending_fertilize_tasks, prices.get("FERTILIZER", 100), cash,
+    )
+    market_orders += throttled_sell_orders(shed, prices)
+    market_orders += hire_orders(me["hires_today"], len(tasks), len(units), cash)
+    market_orders += land_orders(me["unlocked_quadrants"], tiles, cash)
+    market_orders = market_orders[:10]
+
+    return {"farmer": farmer_op, "hands": hand_ops, "market": market_orders}
