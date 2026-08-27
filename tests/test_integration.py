@@ -68,3 +68,22 @@ def test_agent_caps_market_orders_at_ten():
     obs["private"]["seeds"] = {"WHEAT": 0, "CARROT": 0, "TOMATO": 0, "STRAWBERRY": 0, "MELON": 0}
     result = main.agent(obs)
     assert len(result["market"]) <= 10
+
+
+def test_agent_routes_first_hand_to_animal_duty_and_rest_to_crops():
+    obs = _synthetic_obs()
+    obs["farms"][0]["hands"] = [[3, 4], [7, 7]]  # hand 0 on the COOP zone tile, hand 1 elsewhere
+    obs["private"]["seeds"] = {"WHEAT": 5}
+    obs["private"]["inventories"] = [{}, {}, {}]  # farmer, hand0 (animal), hand1 (crop)
+    result = main.agent(obs)
+    assert len(result["hands"]) == 2
+    # hand 0 stands exactly on the COOP zone tile with no animal placed yet -> BUILD_COOP.
+    assert result["hands"][0] == ["BUILD_COOP"]
+    # hand 1 is a normal crop hand: some valid op, not an animal-only op.
+    assert result["hands"][1][0] not in ("FEED", "BUILD_COOP", "BUILD_PASTURE", "PLACE", "CARE", "COLLECT_FERTILIZER")
+
+
+def test_agent_market_orders_include_mandatory_hire_first_when_no_hires_yet():
+    obs = _synthetic_obs()
+    result = main.agent(obs)
+    assert result["market"][0] == ["HIRE"]

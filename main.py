@@ -379,6 +379,7 @@ def _agent_impl(obs):
     hand_positions = [tuple(h) for h in me["hands"]]
     shed = private["shed"]
     seeds_owned = private["seeds"]
+    inventories = private["inventories"]
     prices = obs["market"]["prices"]
 
     tile_count = sum(1 for row in tiles for tile in row if tile != "LOCKED")
@@ -393,30 +394,44 @@ def _agent_impl(obs):
     has_fertilizer = shed.get("FERTILIZER", 0) > 0
     tasks = build_task_queue(tiles, day, has_fertilizer)
 
-    units = [(fx, fy)] + list(hand_positions)
-    assignment = assign_units(units, tasks)
+    animal_hand_pos = hand_positions[0] if hand_positions else None
+    crop_hand_positions = hand_positions[1:] if hand_positions else []
+
+    crop_units = [(fx, fy)] + crop_hand_positions
+    assignment = assign_units(crop_units, tasks)
 
     crop_for_plant = choose_plant_crop(rotation, planted_counts, seeds_owned)
 
     farmer_op = dispatch_unit((fx, fy), assignment[0], crop_for_plant)
-    hand_ops = [
+    crop_hand_ops = [
         dispatch_unit(pos, assignment[i + 1], crop_for_plant)
-        for i, pos in enumerate(hand_positions)
+        for i, pos in enumerate(crop_hand_positions)
     ]
+
+    hand_ops = list(crop_hand_ops)
+    if animal_hand_pos is not None:
+        animal_hand_inventory = inventories[1] if len(inventories) > 1 else {}
+        hand_ops = [dispatch_animal_hand(animal_hand_pos, animal_hand_inventory, tiles, shed)] + crop_hand_ops
+
+    live_animal_count = sum(
+        1 for _, _, xy in ZONE_ANIMALS
+        if isinstance(_tile_at(tiles, xy), dict) and _tile_at(tiles, xy).get("animal") is not None
+    )
 
     pending_fertilize_tasks = sum(1 for t in tasks if t["type"] == "FERTILIZE")
 
-    # Sells come first: unsold shed items are worthless at game end, so
-    # converting produce to cash must never be crowded out of the 10-order
-    # cap by restocking (a real match showed 5+ active crops' seed restocks
-    # eating the whole order budget while sellable inventory piled up unsold).
+    # Order: mandatory animal-hire first (guarantees hands[0] is the animal
+    # hand), then sells (with a wheat reserve for feeding), then the rest
+    # exactly as V1.3.
     market_orders = []
-    market_orders += throttled_sell_orders(shed, prices)
+    market_orders += animal_hand_hire_order(me["hires_today"])
+    market_orders += throttled_sell_orders(shed, prices, wheat_reserve=live_animal_count)
+    market_orders += animal_buy_orders(tiles, shed, cash)
     market_orders += seed_restock_orders(seeds_owned, rotation, cash)
     market_orders += fertilizer_restock_order(
         has_fertilizer, pending_fertilize_tasks, prices.get("FERTILIZER", 100), cash,
     )
-    market_orders += hire_orders(me["hires_today"], len(tasks), len(units), cash)
+    market_orders += hire_orders(me["hires_today"], len(tasks), len(crop_units), cash)
     market_orders += land_orders(me["unlocked_quadrants"], tiles, cash)
     market_orders = market_orders[:10]
 
