@@ -190,3 +190,23 @@ def test_dispatch_animal_hand_moves_toward_empty_zone_tile_when_not_at_it():
     coop_xy = main.ANIMAL_ZONE["COOP"]
     op = main.dispatch_animal_hand((0, 0), {}, tiles, shed={})
     assert op == [main.step_toward((0, 0), coop_xy)]
+
+
+def test_feed_restock_buys_up_to_target_when_low():
+    orders = main.feed_restock_order(shed_wheat=0, live_animal_count=1, wheat_price=25, cash=1000)
+    assert orders == [["BUY_PRODUCT", "WHEAT", 5]]
+
+
+def test_feed_restock_skips_when_no_live_animals():
+    orders = main.feed_restock_order(shed_wheat=0, live_animal_count=0, wheat_price=25, cash=1000)
+    assert orders == []
+
+
+def test_feed_restock_skips_when_already_stocked():
+    orders = main.feed_restock_order(shed_wheat=5, live_animal_count=2, wheat_price=25, cash=1000)
+    assert orders == []
+
+
+def test_feed_restock_buys_partial_amount_when_cash_limited():
+    orders = main.feed_restock_order(shed_wheat=0, live_animal_count=1, wheat_price=25, cash=60)
+    assert orders == [["BUY_PRODUCT", "WHEAT", 2]]

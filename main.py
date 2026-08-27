@@ -285,6 +285,20 @@ def animal_buy_orders(tiles, shed, cash):
     return orders
 
 
+FEED_STOCK_TARGET = 5
+
+
+def feed_restock_order(shed_wheat, live_animal_count, wheat_price, cash):
+    if live_animal_count <= 0 or shed_wheat >= FEED_STOCK_TARGET:
+        return []
+    needed = FEED_STOCK_TARGET - shed_wheat
+    affordable = int(cash // wheat_price) if wheat_price > 0 else 0
+    amount = min(needed, affordable)
+    if amount <= 0:
+        return []
+    return [["BUY_PRODUCT", "WHEAT", amount]]
+
+
 def nearest_shed_tile(pos):
     return (4, 4)
 
@@ -426,6 +440,7 @@ def _agent_impl(obs):
     market_orders = []
     market_orders += animal_hand_hire_order(me["hires_today"])
     market_orders += throttled_sell_orders(shed, prices, wheat_reserve=live_animal_count)
+    market_orders += feed_restock_order(shed.get("WHEAT", 0), live_animal_count, prices.get("WHEAT", 25), cash)
     market_orders += animal_buy_orders(tiles, shed, cash)
     market_orders += seed_restock_orders(seeds_owned, rotation, cash)
     market_orders += fertilizer_restock_order(
