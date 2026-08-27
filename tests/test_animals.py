@@ -54,3 +54,120 @@ def test_animal_buy_orders_respects_cash_limit():
     tiles = _grid()
     orders = main.animal_buy_orders(tiles, shed={}, cash=350)
     assert orders == [["BUY_ANIMAL", "GOOSE", 1]]
+
+
+def _animal_tile(animal, fed_today=True, yield_units=0, cared_today=True, fertilizer_available=False):
+    kind = "COOP" if animal == "GOOSE" else "PASTURE"
+    return {
+        "kind": kind, "animal": animal, "fed_today": fed_today,
+        "yield_units": yield_units, "cared_today": cared_today,
+        "fertilizer_available": fertilizer_available,
+    }
+
+
+def _tiles_with(assignments):
+    tiles = _grid()
+    for xy, tile in assignments.items():
+        x, y = xy
+        tiles[y][x] = tile
+    return tiles
+
+
+def test_dispatch_animal_hand_feeds_when_carrying_wheat():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", fed_today=False)})
+    op = main.dispatch_animal_hand(goose_xy, {"WHEAT": 2}, tiles, shed={})
+    assert op == ["FEED"]
+
+
+def test_dispatch_animal_hand_moves_toward_unfed_animal_when_carrying_wheat():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", fed_today=False)})
+    op = main.dispatch_animal_hand((0, 0), {"WHEAT": 2}, tiles, shed={})
+    assert op == [main.step_toward((0, 0), goose_xy)]
+
+
+def test_dispatch_animal_hand_picks_up_wheat_when_unfed_and_empty_handed():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", fed_today=False)})
+    shed_pos = main.nearest_shed_tile(goose_xy)
+    op = main.dispatch_animal_hand(shed_pos, {}, tiles, shed={"WHEAT": 3})
+    assert op == ["PICKUP", "WHEAT", 1]  # only 1 animal unfed -> pick up 1
+
+
+def test_dispatch_animal_hand_caps_wheat_pickup_at_shed_stock():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    cow_xy = main.ANIMAL_ZONE["PASTURE_1"]
+    tiles = _tiles_with({
+        goose_xy: _animal_tile("GOOSE", fed_today=False),
+        cow_xy: _animal_tile("COW", fed_today=False),
+    })
+    shed_pos = main.nearest_shed_tile(goose_xy)
+    op = main.dispatch_animal_hand(shed_pos, {}, tiles, shed={"WHEAT": 1})
+    assert op == ["PICKUP", "WHEAT", 1]  # 2 unfed but shed only has 1
+
+
+def test_dispatch_animal_hand_does_not_pass_when_no_wheat_anywhere():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", fed_today=False)})
+    shed_pos = main.nearest_shed_tile(goose_xy)
+    op = main.dispatch_animal_hand(shed_pos, {}, tiles, shed={"WHEAT": 0})
+    assert op == ["PASS"]
+
+
+def test_dispatch_animal_hand_harvests_ready_product_before_building():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", yield_units=2)})
+    op = main.dispatch_animal_hand(goose_xy, {}, tiles, shed={})
+    assert op == ["HARVEST"]
+
+
+def test_dispatch_animal_hand_builds_empty_zone_tile():
+    tiles = _grid()  # all zone tiles empty
+    coop_xy = main.ANIMAL_ZONE["COOP"]
+    op = main.dispatch_animal_hand(coop_xy, {}, tiles, shed={})
+    assert op == ["BUILD_COOP"]
+
+
+def test_dispatch_animal_hand_delivers_owned_animal_from_shed():
+    cow_xy = main.ANIMAL_ZONE["PASTURE_1"]
+    tiles = _tiles_with({
+        main.ANIMAL_ZONE["COOP"]: {"kind": "COOP", "animal": None},
+        cow_xy: {"kind": "PASTURE", "animal": None},
+        main.ANIMAL_ZONE["PASTURE_2"]: {"kind": "PASTURE", "animal": None},
+    })
+    shed_pos = main.nearest_shed_tile(cow_xy)
+    op = main.dispatch_animal_hand(shed_pos, {}, tiles, shed={"COW": 1})
+    assert op == ["PICKUP", "COW", 1]
+
+
+def test_dispatch_animal_hand_places_carried_animal_at_its_slot():
+    cow_xy = main.ANIMAL_ZONE["PASTURE_1"]
+    tiles = _tiles_with({
+        main.ANIMAL_ZONE["COOP"]: {"kind": "COOP", "animal": None},
+        cow_xy: {"kind": "PASTURE", "animal": None},
+        main.ANIMAL_ZONE["PASTURE_2"]: {"kind": "PASTURE", "animal": None},
+    })
+    op = main.dispatch_animal_hand(cow_xy, {"COW": 1}, tiles, shed={})
+    assert op == ["PLACE", "COW"]
+
+
+def test_dispatch_animal_hand_cares_for_fed_animal_with_no_yield():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", cared_today=False)})
+    op = main.dispatch_animal_hand(goose_xy, {}, tiles, shed={})
+    assert op == ["CARE"]
+
+
+def test_dispatch_animal_hand_collects_fertilizer_last():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", fertilizer_available=True)})
+    op = main.dispatch_animal_hand(goose_xy, {}, tiles, shed={})
+    assert op == ["COLLECT_FERTILIZER"]
+
+
+def test_dispatch_animal_hand_passes_when_fully_idle():
+    goose_xy = main.ANIMAL_ZONE["COOP"]
+    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE")})  # fed, no yield, cared, no fertilizer
+    op = main.dispatch_animal_hand(goose_xy, {}, tiles, shed={})
+    assert op == ["PASS"]

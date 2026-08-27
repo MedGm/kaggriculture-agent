@@ -281,6 +281,86 @@ def animal_buy_orders(tiles, shed, cash):
     return orders
 
 
+def nearest_shed_tile(pos):
+    return (4, 4)
+
+
+def _move_or_act(pos, target_xy, op):
+    if pos != target_xy:
+        direction = step_toward(pos, target_xy)
+        return [direction] if direction else ["PASS"]
+    return [op] if op else None
+
+
+def dispatch_animal_hand(hand_pos, hand_inventory, tiles, shed):
+    hand_inventory = hand_inventory or {}
+    unfed, ready_harvest, uncared, fertilizer_ready = [], [], [], []
+    needs_build, needs_deliver = [], []
+
+    for animal, structure_kind, xy in ZONE_ANIMALS:
+        tile = _tile_at(tiles, xy)
+        if tile is None:
+            if xy == hand_pos:
+                needs_build.append((structure_kind, xy))
+        elif tile.get("animal") is None:
+            if shed.get(animal, 0) > 0 or hand_inventory.get(animal, 0) > 0:
+                needs_deliver.append((animal, xy))
+        elif tile.get("animal") == animal:
+            if not tile["fed_today"]:
+                unfed.append((animal, xy))
+            elif tile["yield_units"] > 0:
+                ready_harvest.append((animal, xy))
+            elif not tile["cared_today"]:
+                uncared.append((animal, xy))
+            elif tile.get("fertilizer_available"):
+                fertilizer_ready.append((animal, xy))
+
+    def nearest(candidates):
+        return min(candidates, key=lambda a: abs(a[1][0] - hand_pos[0]) + abs(a[1][1] - hand_pos[1]))
+
+    if unfed:
+        if hand_inventory.get("WHEAT", 0) > 0:
+            _, xy = nearest(unfed)
+            return _move_or_act(hand_pos, xy, "FEED")
+        shed_pos = nearest_shed_tile(hand_pos)
+        if hand_pos != shed_pos:
+            direction = step_toward(hand_pos, shed_pos)
+            return [direction] if direction else ["PASS"]
+        amount = min(len(unfed), shed.get("WHEAT", 0))
+        if amount <= 0:
+            return ["PASS"]
+        return ["PICKUP", "WHEAT", amount]
+
+    if ready_harvest:
+        _, xy = nearest(ready_harvest)
+        return _move_or_act(hand_pos, xy, "HARVEST")
+
+    if needs_build:
+        structure_kind, xy = needs_build[0]
+        return _move_or_act(hand_pos, xy, f"BUILD_{structure_kind}")
+
+    if needs_deliver:
+        animal, xy = needs_deliver[0]
+        if hand_inventory.get(animal, 0) > 0:
+            moved = _move_or_act(hand_pos, xy, None)
+            return moved if moved is not None else ["PLACE", animal]
+        shed_pos = nearest_shed_tile(hand_pos)
+        if hand_pos != shed_pos:
+            direction = step_toward(hand_pos, shed_pos)
+            return [direction] if direction else ["PASS"]
+        return ["PICKUP", animal, 1]
+
+    if uncared:
+        _, xy = nearest(uncared)
+        return _move_or_act(hand_pos, xy, "CARE")
+
+    if fertilizer_ready:
+        _, xy = nearest(fertilizer_ready)
+        return _move_or_act(hand_pos, xy, "COLLECT_FERTILIZER")
+
+    return ["PASS"]
+
+
 # agent() must be the LAST callable defined in this file: kaggle_environments
 # loads a file-based agent submission via the last callable in the module
 # namespace (kaggle_environments/agent.py get_last_callable), not by name.
