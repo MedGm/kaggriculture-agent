@@ -120,3 +120,24 @@ def test_land_orders_skips_when_unaffordable():
     tiles = [[{"kind": "WEED"}] * 5 for _ in range(5)]
     orders = main.land_orders(unlocked_quadrants=["NW"], tiles=tiles, cash=500)
     assert orders == []  # next cost is 1000
+
+
+def test_throttled_sell_reserves_wheat_for_feeding():
+    orders = main.throttled_sell_orders(shed={"WHEAT": 5}, prices={"WHEAT": 25}, wheat_reserve=3)
+    assert orders == [["SELL", "WHEAT", 2]]
+
+
+def test_throttled_sell_skips_wheat_entirely_when_reserve_covers_all_of_it():
+    orders = main.throttled_sell_orders(shed={"WHEAT": 3}, prices={"WHEAT": 25}, wheat_reserve=3)
+    assert orders == []
+
+
+def test_throttled_sell_reserve_ignored_during_force_sell():
+    shed = {"WHEAT": 87, "MELON": 4}  # total 91 >= 90 force threshold
+    orders = main.throttled_sell_orders(shed=shed, prices={"WHEAT": 25, "MELON": 3}, wheat_reserve=10)
+    assert ["SELL", "WHEAT", 87] in orders  # full amount sold despite reserve, shed is nearly full
+
+
+def test_throttled_sell_default_reserve_is_zero_backward_compatible():
+    orders = main.throttled_sell_orders(shed={"WHEAT": 4}, prices={"WHEAT": 25})
+    assert orders == [["SELL", "WHEAT", 4]]

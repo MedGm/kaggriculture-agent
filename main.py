@@ -103,7 +103,8 @@ def build_task_queue(tiles, day, has_fertilizer):
         for x, tile in enumerate(row):
             task_type = None
             if tile is None:
-                task_type = "PLANT"
+                if (x, y) not in ANIMAL_ZONE_TILES:
+                    task_type = "PLANT"
             elif tile == "LOCKED":
                 continue
             elif tile.get("kind") == "WEED":
@@ -203,17 +204,20 @@ def fertilizer_restock_order(has_fertilizer, pending_fertilize_tasks, fertilizer
     return [["BUY_PRODUCT", "FERTILIZER", 1]]
 
 
-def throttled_sell_orders(shed, prices):
+def throttled_sell_orders(shed, prices, wheat_reserve=0):
     total_in_shed = sum(shed.values())
     force = total_in_shed >= SHED_FORCE_SELL_THRESHOLD
     orders = []
     for item, qty in shed.items():
-        if qty <= 0:
+        sellable = qty
+        if item == "WHEAT" and not force:
+            sellable = max(0, qty - wheat_reserve)
+        if sellable <= 0:
             continue
         price = prices.get(item, 1)
         if not force and price <= SELL_FLOOR_PRICE:
             continue
-        amount = qty if force else min(qty, SELL_CAP_PER_TURN)
+        amount = sellable if force else min(sellable, SELL_CAP_PER_TURN)
         orders.append(["SELL", item, amount])
     return orders
 

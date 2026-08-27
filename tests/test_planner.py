@@ -134,3 +134,17 @@ def test_dispatch_unit_plant_includes_crop():
 def test_dispatch_unit_no_task_passes():
     op = main.dispatch_unit((0, 0), None, crop_for_plant=None)
     assert op == ["PASS"]
+
+
+def test_build_task_queue_skips_animal_zone_tiles_even_when_empty():
+    x, y = main.ANIMAL_ZONE["COOP"]
+    tiles = [[None for _ in range(10)] for _ in range(10)]
+    tasks = main.build_task_queue(tiles, day=1, has_fertilizer=False)
+    assert not any(t["x"] == x and t["y"] == y for t in tasks)
+
+
+def test_build_task_queue_still_plants_non_zone_empty_tiles():
+    tiles = [[None for _ in range(10)] for _ in range(10)]
+    tasks = main.build_task_queue(tiles, day=1, has_fertilizer=False)
+    # (0,0) is not in the animal zone -> still a PLANT candidate.
+    assert {"type": "PLANT", "x": 0, "y": 0, "priority": 4} in tasks
