@@ -300,8 +300,7 @@ def dispatch_animal_hand(hand_pos, hand_inventory, tiles, shed):
     for animal, structure_kind, xy in ZONE_ANIMALS:
         tile = _tile_at(tiles, xy)
         if tile is None:
-            if xy == hand_pos:
-                needs_build.append((structure_kind, xy))
+            needs_build.append((structure_kind, xy))
         elif tile.get("animal") is None:
             if shed.get(animal, 0) > 0 or hand_inventory.get(animal, 0) > 0:
                 needs_deliver.append((animal, xy))

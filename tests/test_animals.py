@@ -154,20 +154,39 @@ def test_dispatch_animal_hand_places_carried_animal_at_its_slot():
 
 def test_dispatch_animal_hand_cares_for_fed_animal_with_no_yield():
     goose_xy = main.ANIMAL_ZONE["COOP"]
-    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", cared_today=False)})
+    tiles = _tiles_with({
+        goose_xy: _animal_tile("GOOSE", cared_today=False),
+        main.ANIMAL_ZONE["PASTURE_1"]: _animal_tile("COW"),
+        main.ANIMAL_ZONE["PASTURE_2"]: _animal_tile("SHEEP"),
+    })
     op = main.dispatch_animal_hand(goose_xy, {}, tiles, shed={})
     assert op == ["CARE"]
 
 
 def test_dispatch_animal_hand_collects_fertilizer_last():
     goose_xy = main.ANIMAL_ZONE["COOP"]
-    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE", fertilizer_available=True)})
+    tiles = _tiles_with({
+        goose_xy: _animal_tile("GOOSE", fertilizer_available=True),
+        main.ANIMAL_ZONE["PASTURE_1"]: _animal_tile("COW"),
+        main.ANIMAL_ZONE["PASTURE_2"]: _animal_tile("SHEEP"),
+    })
     op = main.dispatch_animal_hand(goose_xy, {}, tiles, shed={})
     assert op == ["COLLECT_FERTILIZER"]
 
 
 def test_dispatch_animal_hand_passes_when_fully_idle():
     goose_xy = main.ANIMAL_ZONE["COOP"]
-    tiles = _tiles_with({goose_xy: _animal_tile("GOOSE")})  # fed, no yield, cared, no fertilizer
+    tiles = _tiles_with({
+        goose_xy: _animal_tile("GOOSE"),  # fed, no yield, cared, no fertilizer
+        main.ANIMAL_ZONE["PASTURE_1"]: _animal_tile("COW"),
+        main.ANIMAL_ZONE["PASTURE_2"]: _animal_tile("SHEEP"),
+    })
     op = main.dispatch_animal_hand(goose_xy, {}, tiles, shed={})
     assert op == ["PASS"]
+
+
+def test_dispatch_animal_hand_moves_toward_empty_zone_tile_when_not_at_it():
+    tiles = _grid()  # all zone tiles empty
+    coop_xy = main.ANIMAL_ZONE["COOP"]
+    op = main.dispatch_animal_hand((0, 0), {}, tiles, shed={})
+    assert op == [main.step_toward((0, 0), coop_xy)]
