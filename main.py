@@ -435,18 +435,25 @@ def _agent_impl(obs):
     pending_fertilize_tasks = sum(1 for t in tasks if t["type"] == "FERTILIZE")
 
     # Order: mandatory animal-hire first (guarantees hands[0] is the animal
-    # hand), then sells (with a wheat reserve for feeding), then the rest
-    # exactly as V1.3.
+    # hand), then sells (with a wheat reserve for feeding), then crop-hand
+    # hiring BEFORE big-ticket animal/seed spending. Crop hire_orders needs
+    # a $200 cash reserve to fire; if animal_buy/seed_restock ran first they
+    # could drain cash below that reserve for many turns, permanently
+    # starving the farmer of a second hand and freezing crop growth at
+    # whatever tile count one farmer can maintain solo (observed live: farm
+    # plateaus at ~5 tiles while cash sits under $20 for 20+ turns). Funding
+    # crop labor first lets the backlog-gated hire_orders actually scale the
+    # crop side instead of never affording the reserve.
     market_orders = []
     market_orders += animal_hand_hire_order(me["hires_today"])
     market_orders += throttled_sell_orders(shed, prices, wheat_reserve=live_animal_count)
+    market_orders += hire_orders(me["hires_today"], len(tasks), len(crop_units), cash)
     market_orders += feed_restock_order(shed.get("WHEAT", 0), live_animal_count, prices.get("WHEAT", 25), cash)
     market_orders += animal_buy_orders(tiles, shed, cash)
     market_orders += seed_restock_orders(seeds_owned, rotation, cash)
     market_orders += fertilizer_restock_order(
         has_fertilizer, pending_fertilize_tasks, prices.get("FERTILIZER", 100), cash,
     )
-    market_orders += hire_orders(me["hires_today"], len(tasks), len(crop_units), cash)
     market_orders += land_orders(me["unlocked_quadrants"], tiles, cash)
     market_orders = market_orders[:10]
 
