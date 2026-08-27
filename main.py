@@ -10,6 +10,29 @@ CROPS = {
     "MELON":      {"seed_cost": 80,  "base_price": 250, "first_yield_day": 10, "max_yield_day": 10, "ongoing": False},
 }
 
+ANIMALS = {
+    "GOOSE": {"cost": 300, "structure": "COOP"},
+    "COW":   {"cost": 400, "structure": "PASTURE"},
+    "SHEEP": {"cost": 500, "structure": "PASTURE"},
+}
+
+# Fixed tile assignment (never dynamic): each animal always targets the same
+# slot. All three are inside the always-unlocked NW starting quadrant, close
+# to the shed-adjacent tile (4,4), so the dedicated animal hand's daily
+# route is short and predictable.
+ANIMAL_ZONE = {"COOP": (3, 4), "PASTURE_1": (3, 3), "PASTURE_2": (2, 4)}
+ZONE_ANIMALS = [
+    ("GOOSE", "COOP", ANIMAL_ZONE["COOP"]),
+    ("COW", "PASTURE", ANIMAL_ZONE["PASTURE_1"]),
+    ("SHEEP", "PASTURE", ANIMAL_ZONE["PASTURE_2"]),
+]
+ANIMAL_ZONE_TILES = {xy for _, _, xy in ZONE_ANIMALS}
+
+
+def _tile_at(tiles, xy):
+    x, y = xy
+    return tiles[y][x]
+
 # Confirmed via scripts/probe_axis.py (real run, not the placeholder guess):
 #   Before NORTH: x=4 y=4
 #   After NORTH:  x=4 y=3
@@ -236,6 +259,26 @@ def land_orders(unlocked_quadrants, tiles, cash):
     if cash < cost + LAND_CASH_RESERVE:
         return []
     return [["BUY_LAND"]]
+
+
+def animal_hand_hire_order(hires_today):
+    return [["HIRE"]] if hires_today == 0 else []
+
+
+def animal_buy_orders(tiles, shed, cash):
+    orders = []
+    remaining_cash = cash
+    for animal, _structure_kind, xy in ZONE_ANIMALS:
+        tile = _tile_at(tiles, xy)
+        already_placed = isinstance(tile, dict) and tile.get("animal") == animal
+        owned_unplaced = shed.get(animal, 0) > 0
+        if already_placed or owned_unplaced:
+            continue
+        cost = ANIMALS[animal]["cost"]
+        if remaining_cash >= cost:
+            orders.append(["BUY_ANIMAL", animal, 1])
+            remaining_cash -= cost
+    return orders
 
 
 # agent() must be the LAST callable defined in this file: kaggle_environments
