@@ -378,6 +378,47 @@ def dispatch_animal_hand(hand_pos, hand_inventory, tiles, shed):
     return ["PASS"]
 
 
+def setup_complete(tiles):
+    return all(
+        isinstance(_tile_at(tiles, xy), dict) and _tile_at(tiles, xy).get("animal") == animal
+        for animal, _, xy in ZONE_ANIMALS
+    )
+
+
+def dispatch_setup_helper(hand_pos, hand_inventory, tiles, shed):
+    hand_inventory = hand_inventory or {}
+    needs_build, needs_deliver = [], []
+
+    for animal, structure_kind, xy in reversed(ZONE_ANIMALS):
+        tile = _tile_at(tiles, xy)
+        if tile is None:
+            needs_build.append((structure_kind, xy))
+        elif tile.get("animal") is None:
+            if shed.get(animal, 0) > 0 or hand_inventory.get(animal, 0) > 0:
+                needs_deliver.append((animal, xy))
+
+    if needs_build:
+        structure_kind, xy = needs_build[0]
+        return _move_or_act(hand_pos, xy, f"BUILD_{structure_kind}")
+
+    if needs_deliver:
+        animal, xy = needs_deliver[0]
+        if hand_inventory.get(animal, 0) > 0:
+            moved = _move_or_act(hand_pos, xy, None)
+            return moved if moved is not None else ["PLACE", animal]
+        shed_pos = nearest_shed_tile(hand_pos)
+        if hand_pos != shed_pos:
+            direction = step_toward(hand_pos, shed_pos)
+            return [direction] if direction else ["PASS"]
+        return ["PICKUP", animal, 1]
+
+    return ["PASS"]
+
+
+def second_hand_hire_order(hires_today):
+    return [["HIRE"]] if hires_today < 2 else []
+
+
 # agent() must be the LAST callable defined in this file: kaggle_environments
 # loads a file-based agent submission via the last callable in the module
 # namespace (kaggle_environments/agent.py get_last_callable), not by name.

@@ -210,3 +210,80 @@ def test_feed_restock_skips_when_already_stocked():
 def test_feed_restock_buys_partial_amount_when_cash_limited():
     orders = main.feed_restock_order(shed_wheat=0, live_animal_count=1, wheat_price=25, cash=60)
     assert orders == [["BUY_PRODUCT", "WHEAT", 2]]
+
+
+def test_setup_complete_true_when_all_three_placed():
+    tiles = _grid()
+    placements = {
+        main.ANIMAL_ZONE["COOP"]: {"kind": "COOP", "animal": "GOOSE"},
+        main.ANIMAL_ZONE["PASTURE_1"]: {"kind": "PASTURE", "animal": "COW"},
+        main.ANIMAL_ZONE["PASTURE_2"]: {"kind": "PASTURE", "animal": "SHEEP"},
+    }
+    for (x, y), tile in placements.items():
+        tiles[y][x] = tile
+    assert main.setup_complete(tiles) is True
+
+
+def test_setup_complete_false_when_one_missing():
+    tiles = _grid()
+    x, y = main.ANIMAL_ZONE["COOP"]
+    tiles[y][x] = {"kind": "COOP", "animal": "GOOSE"}
+    assert main.setup_complete(tiles) is False
+
+
+def test_setup_complete_false_on_fresh_farm():
+    tiles = _grid()
+    assert main.setup_complete(tiles) is False
+
+
+def test_dispatch_setup_helper_targets_sheep_end_first_on_fresh_farm():
+    tiles = _grid()  # all zone tiles empty
+    sheep_pasture_xy = main.ANIMAL_ZONE["PASTURE_2"]
+    op = main.dispatch_setup_helper(sheep_pasture_xy, {}, tiles, shed={})
+    assert op == ["BUILD_PASTURE"]
+
+
+def test_dispatch_setup_helper_differs_from_animal_hand_on_same_fresh_input():
+    tiles = _grid()
+    hand_pos = main.ANIMAL_ZONE["COOP"]
+    main_op = main.dispatch_animal_hand(hand_pos, {}, tiles, shed={})
+    helper_op = main.dispatch_setup_helper(hand_pos, {}, tiles, shed={})
+    assert main_op == ["BUILD_COOP"]
+    assert helper_op != ["BUILD_COOP"]
+
+
+def test_dispatch_setup_helper_never_feeds_harvests_cares_or_collects():
+    x, y = main.ANIMAL_ZONE["COOP"]
+    tiles = _grid()
+    tiles[y][x] = {
+        "kind": "COOP", "animal": "GOOSE", "fed_today": False,
+        "yield_units": 5, "cared_today": False, "fertilizer_available": True,
+    }
+    op = main.dispatch_setup_helper((x, y), {}, tiles, shed={})
+    assert op[0] not in ("FEED", "HARVEST", "CARE", "COLLECT_FERTILIZER")
+
+
+def test_dispatch_setup_helper_delivers_owned_animal_from_shed():
+    tiles = _grid()
+    tiles[main.ANIMAL_ZONE["COOP"][1]][main.ANIMAL_ZONE["COOP"][0]] = {"kind": "COOP", "animal": None}
+    tiles[main.ANIMAL_ZONE["PASTURE_1"][1]][main.ANIMAL_ZONE["PASTURE_1"][0]] = {"kind": "PASTURE", "animal": None}
+    tiles[main.ANIMAL_ZONE["PASTURE_2"][1]][main.ANIMAL_ZONE["PASTURE_2"][0]] = {"kind": "PASTURE", "animal": None}
+    shed_pos = main.nearest_shed_tile((0, 0))
+    op = main.dispatch_setup_helper(shed_pos, {}, tiles, shed={"SHEEP": 1})
+    assert op == ["PICKUP", "SHEEP", 1]
+
+
+def test_dispatch_setup_helper_returns_pass_when_nothing_to_do():
+    tiles = _grid()
+    for animal, kind, xy in main.ZONE_ANIMALS:
+        x, y = xy
+        tiles[y][x] = {"kind": kind, "animal": animal}
+    op = main.dispatch_setup_helper(main.ANIMAL_ZONE["COOP"], {}, tiles, shed={})
+    assert op == ["PASS"]
+
+
+def test_second_hand_hire_order_fires_below_two_hires():
+    assert main.second_hand_hire_order(hires_today=0) == [["HIRE"]]
+    assert main.second_hand_hire_order(hires_today=1) == [["HIRE"]]
+    assert main.second_hand_hire_order(hires_today=2) == []
+    assert main.second_hand_hire_order(hires_today=5) == []
