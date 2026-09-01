@@ -449,8 +449,15 @@ def _agent_impl(obs):
     has_fertilizer = shed.get("FERTILIZER", 0) > 0
     tasks = build_task_queue(tiles, day, has_fertilizer)
 
+    setup_done = setup_complete(tiles)
     animal_hand_pos = hand_positions[0] if hand_positions else None
-    crop_hand_positions = hand_positions[1:] if hand_positions else []
+    helper_pos = hand_positions[1] if len(hand_positions) > 1 else None
+    other_hand_positions = hand_positions[2:] if len(hand_positions) > 2 else []
+
+    if helper_pos is not None and setup_done:
+        crop_hand_positions = [helper_pos] + other_hand_positions
+    else:
+        crop_hand_positions = other_hand_positions
 
     crop_units = [(fx, fy)] + crop_hand_positions
     assignment = assign_units(crop_units, tasks)
@@ -463,10 +470,22 @@ def _agent_impl(obs):
         for i, pos in enumerate(crop_hand_positions)
     ]
 
-    hand_ops = list(crop_hand_ops)
+    animal_op = None
     if animal_hand_pos is not None:
         animal_hand_inventory = inventories[1] if len(inventories) > 1 else {}
-        hand_ops = [dispatch_animal_hand(animal_hand_pos, animal_hand_inventory, tiles, shed)] + crop_hand_ops
+        animal_op = dispatch_animal_hand(animal_hand_pos, animal_hand_inventory, tiles, shed)
+
+    helper_op = None
+    if helper_pos is not None and not setup_done:
+        helper_inventory = inventories[2] if len(inventories) > 2 else {}
+        helper_op = dispatch_setup_helper(helper_pos, helper_inventory, tiles, shed)
+
+    hand_ops = []
+    if animal_op is not None:
+        hand_ops.append(animal_op)
+    if helper_op is not None:
+        hand_ops.append(helper_op)
+    hand_ops.extend(crop_hand_ops)
 
     live_animal_count = sum(
         1 for _, _, xy in ZONE_ANIMALS
@@ -475,18 +494,15 @@ def _agent_impl(obs):
 
     pending_fertilize_tasks = sum(1 for t in tasks if t["type"] == "FERTILIZE")
 
-    # Order: mandatory animal-hire first (guarantees hands[0] is the animal
-    # hand), then sells (with a wheat reserve for feeding), then crop-hand
-    # hiring BEFORE big-ticket animal/seed spending. Crop hire_orders needs
-    # a $200 cash reserve to fire; if animal_buy/seed_restock ran first they
-    # could drain cash below that reserve for many turns, permanently
-    # starving the farmer of a second hand and freezing crop growth at
-    # whatever tile count one farmer can maintain solo (observed live: farm
-    # plateaus at ~5 tiles while cash sits under $20 for 20+ turns). Funding
-    # crop labor first lets the backlog-gated hire_orders actually scale the
-    # crop side instead of never affording the reserve.
+    # Order: both mandatory hires first (guarantees hands[0]=animal hand,
+    # hands[1]=setup helper / permanent 2nd crop hand), then sells (with a
+    # wheat reserve for feeding), then crop-hand hiring BEFORE big-ticket
+    # animal/seed spending (crop hire_orders needs a $200 cash reserve to
+    # fire; big purchases running first could drain cash below that
+    # reserve for many turns, permanently starving crop-side scaling).
     market_orders = []
     market_orders += animal_hand_hire_order(me["hires_today"])
+    market_orders += second_hand_hire_order(me["hires_today"])
     market_orders += throttled_sell_orders(shed, prices, wheat_reserve=live_animal_count)
     market_orders += hire_orders(me["hires_today"], len(tasks), len(crop_units), cash)
     market_orders += feed_restock_order(shed.get("WHEAT", 0), live_animal_count, prices.get("WHEAT", 25), cash)

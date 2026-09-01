@@ -87,3 +87,43 @@ def test_agent_market_orders_include_mandatory_hire_first_when_no_hires_yet():
     obs = _synthetic_obs()
     result = main.agent(obs)
     assert result["market"][0] == ["HIRE"]
+
+
+def test_agent_routes_second_hand_to_setup_helper_when_zone_incomplete():
+    obs = _synthetic_obs()
+    # hand0 = animal hand (on COOP zone tile, empty -> BUILD_COOP is its job).
+    # hand1 = second hand, placed at the SHEEP pasture zone tile (also empty).
+    coop_xy = main.ANIMAL_ZONE["COOP"]
+    sheep_xy = main.ANIMAL_ZONE["PASTURE_2"]
+    obs["farms"][0]["hands"] = [list(coop_xy), list(sheep_xy)]
+    obs["private"]["inventories"] = [{}, {}, {}]
+    result = main.agent(obs)
+    assert len(result["hands"]) == 2
+    assert result["hands"][0] == ["BUILD_COOP"]
+    # hand1 standing on the SHEEP pasture zone tile, empty -> helper builds it directly.
+    assert result["hands"][1] == ["BUILD_PASTURE"]
+
+
+def test_agent_folds_second_hand_into_crop_work_once_zone_complete():
+    obs = _synthetic_obs()
+    for animal, kind, xy in main.ZONE_ANIMALS:
+        x, y = xy
+        obs["farms"][0]["tiles"][y][x] = {
+            "kind": kind, "animal": animal, "fed_today": True,
+            "yield_units": 0, "cared_today": True, "fertilizer_available": False,
+        }
+    obs["farms"][0]["hands"] = [[4, 4], [7, 7]]  # hand0 at shed, hand1 elsewhere
+    obs["private"]["inventories"] = [{}, {}, {}]
+    obs["private"]["seeds"] = {"WHEAT": 5}
+    result = main.agent(obs)
+    assert len(result["hands"]) == 2
+    # hand1's op must NOT be a setup op (no zone tiles left to build/deliver) --
+    # it's now a normal crop-hand op from the ordinary dispatch_unit pipeline.
+    assert result["hands"][1][0] not in ("BUILD_COOP", "BUILD_PASTURE", "PICKUP", "PLACE")
+
+
+def test_agent_market_orders_include_both_mandatory_hires_first():
+    obs = _synthetic_obs()
+    result = main.agent(obs)
+    assert result["market"][0] == ["HIRE"]
+    assert result["market"][1] == ["HIRE"]
